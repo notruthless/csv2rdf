@@ -17,6 +17,10 @@
 	
 	
 	changes:
+	12.07.27 redo to use configuration file to help with translation
+				step 1: implement data structures for keeping track of classes and properties
+						  with current interface.
+				step 2: read and process configuration file.
 	12.06.27 change spaces to underscores in attribute names.
 				trim leading/trailing spaces from data.
 	
@@ -33,72 +37,7 @@ import java.util.List;
 
 public class csv2rdf {
 
-	public static int AskForIDAttribute(String[] attributes) {
-		// given an array of strings, ask the user which one to use as the id field.
-		// but for now, just automatically return the index of the attribute "name"
-		// I know that will be the second element for our test file so to start just return 1
-
-		for (int i = 0; i < attributes.length; i++) {
-				System.out.printf("%d: %s\n", i, attributes[i]);
-		
-		}
-
-		int num = -1;
-		while(true)
-		  {  
-			// loop until they enter a valid number
-		  		num = Console.readInt("Which attribute will be used as the name of the instance?");
-				if (num >= 0 && num < attributes.length) {
-					break;
-				} else {
-					Console.printPrompt("Not a valid entry, please enter a number between 0 and " + (attributes.length - 1) + "\n");
-				}	 
-		  }
-
-
-		return num;
-	
-	}
-
-	public static String AskForInstanceType() {
-		// ask the user for a string to use as the type of the instance.
-		// for now I happen to know it will be "staff"
-		String instanceType;
-		
-		String response;
-		  
-		response = Console.readLine("Please enter a string to use for the type of the instance:");
-		if (response.trim() != "") {
-			// trim off quotes if they put them there.
-			instanceType = response.replaceAll("^\"|\"$", "").trim().replaceAll(" ","_");
-		} else {
-			instanceType = "Staff";
-		}
-		
-		return instanceType;
-	}
-
-	public static String AskForSuperClassName() {
-		// ask the user if they want an "all" class (instead of just Thing.
-		// an answer starting with y gets an all class. Any other answer doesn't
-
-		String superclass;
-		
-		String response;
-		  
-		response = Console.readLine("Do you want an \"all\" class (y or n)?");
-		response = response.trim();
-		char firstChar = (response.length() == 0) ? 'n' : response.charAt(0);
-		if (firstChar == 'y' || firstChar == 'Y') {
-			superclass = "all";
-		} else {
-			superclass = "Thing";
-		}
-		
-		return superclass;
-	}
-
-	
+	static int blankCounter;	// keep track of blanks seen in config file and then in header file.
 	public static String BaseFileName(String name) {
 		// takes a file name (like input.csv) and returns it without the extension
 		int p = name.lastIndexOf(".");
@@ -109,10 +48,114 @@ public class csv2rdf {
 			return name.substring(0,p);
 		}
 	}
+	
+	public static CSVConfig readConfigFile(String configFile) throws IOException {
+		CSVConfig config = new CSVConfig();
+		
+		CSVReader configReader;
+		configReader = new CSVReader(new FileReader(configFile));	// if there's a config file this will open it.
+		
+		System.out.println("Reading Configuration File: " + configFile);
+		
+		String [] nextLine;
+		while ((nextLine = configReader.readNext()) != null) {
+			// process one line at a time.
+			// of the form csv_name type(rdf_name)	class_name
+			// type can be "class" or "property"
+			// class_name is the name of the rdf class to use or the superclass
+			// if any of these fields is blank, at least the tab must be there.
+			// minimal error checking
+			
+			if (nextLine.length == 3) {
+				String csv_name = fixAttributeName(nextLine[0]);	// fixes this name like the header (trim, underscores for blanks, unlabeled1, etc)
+				
+				String [] typeInfo = nextLine[1].split("[\\(\\)]");		// split out what's inside the parenthesis
+				
+				String itemType = typeInfo[0].trim().toLowerCase();
+				
+				String rdf_name = "";
+				if (typeInfo.length > 1) {
+					rdf_name = typeInfo[1].trim().replace("\"", "");	// remove any quotes, too;
+				}
+				if (rdf_name.length() == 0) rdf_name = csv_name;  // there's not a different rdf_name for this item
+				
+				String class_name = nextLine[2].trim();
+				
+				// OK now add this. Config object will look at the type and do the right thing.
+				config.addItem(itemType, csv_name, rdf_name, class_name);
+
+				
+			} else {
+				System.out.println("Badly formed instance, skipping");
+				System.out.print("   <");
+				for (int i=0;i<nextLine.length; i++) {
+					System.out.print(nextLine[i] + " ");
+				}
+				System.out.println(">");
+			}
+		}
+		configReader.close();	
+		
+		return config;
+	}
+	
+	public static CSVConfig doManualConfig(String fileName) {
+		CSVConfig config = null;
+		try {
+
+			CSVReader reader;
+			reader = new CSVReader(new FileReader(fileName));
+			System.out.println("No configuration file. ");
+			String [] attributes = reader.readNext(); // header line
+			reader.close();	// done with the file for our test
+			
+			config = new CSVConfig(attributes);	// create a config file from the line with asking user questions.
+		}
+		catch (IOException i) {
+			// no file.  will catch it later.
+			config = new CSVConfig();
+		}
+		return config;
+	}
+
+	public static String fixAttributeName(String att) {
+		// uses the global blankCounter to keep track of how many blanks we've seen.
+		// easiest way to be consistent for both reading config file and reading data.	
+		att = att.trim();
+		att = att.replaceAll(" ","_");
+		if (att.length() == 0) {
+			blankCounter++;
+			att = "unlabeled" + blankCounter;
+		}
+		return att;
+	}
+	
+	public static void fixAttributes(String[] attributes) {
+		// replace any spaces in the attributes with underscores
+		// replace any blank attributes with "unlabeled1", "unlabeled2" -- RH 12.07.03
+		// (now that happens in fixAttributeName)
+		for (int i = 0; i < attributes.length; i++) {
+			attributes[i] = fixAttributeName(attributes[i]);
+		}
+	}
+	
+	public static boolean containsData(String s) {
+		// returns false if s is an empty String
+		// or the word "null" (or NULL)
+		return ((s.length() > 0)  && !s.toLowerCase().equals("null"));
+
+	}
+	
+	
+	public static void fixInputLine(String[] data) {
+		for (int i = 0; i < data.length; i++) {
+			data[i] = data[i].trim();	// fix up the data 
+		}
+	}
 
 	private static final String INPUT_FILE="input.csv";
+   public static final Boolean DEBUG = false;
    
-	
 	public static void main(String[] args) throws IOException {
 		
 		
@@ -125,28 +168,89 @@ public class csv2rdf {
 		}
 		
 		
+		String baseFileName = BaseFileName(fileName);
+		CSVConfig config;	
+		
+		blankCounter = 0;	// before we read the file, reset the blank counter
+		// is there a configuration file?
+	  	try {  
+			String configFile = baseFileName + "-config.csv";
+			config = readConfigFile(configFile);
+		}		
+	   catch (IOException ioe) {
+			// no configuration file, just ask a few questions and do simple configuration from that.
+			// use info from the header of the main file.
+			config = doManualConfig(fileName);
+	  }
+
+		// we have now got our configuration.  Print it out if we're debugging.
+		if (DEBUG) {
+			System.out.println("CLASSES");
+		
+		   for (String cName : config.classes()) {
+		   	System.out.print(cName + ": ");
+		   	for (String pName : config.getProperties(cName)) {
+		   		System.out.print(pName + " ");
+		   	}
+		   	System.out.println("");
+		   }
+		   System.out.println("");
+		   
+		   
+		}
+
+		 		   	
+	
+		// Now read in the input file and process it using the information we stored from the configuration step.
 	  	try {  // handle error where file doesn't exist.
 			CSVReader reader;
 			reader = new CSVReader(new FileReader(fileName));
 			System.out.println("Reading CSV from " + fileName);
+			
+		   blankCounter = 0;	// before we read the file, reset the blank counter
 			String [] attributes = reader.readNext(); // header line
 			
 			if (attributes != null) {
 				int numAttributes = attributes.length;
 				
-				int idAttribute = AskForIDAttribute(attributes);	// find out which attribute is the one to be used as ID
-				System.out.println("(Chose " + '"' + attributes[idAttribute].trim() + '"' + ')');
-				String instanceType = AskForInstanceType();
-				System.out.println("(Chose " + '"' + instanceType + '"' + ')');
-				String superclassName = AskForSuperClassName();
-				System.out.println("(Using superclass " + '"' + superclassName + '"' + ')');
+				fixAttributes(attributes);	 //  consistent with the config file... 
 				
-				outputFile = BaseFileName(fileName) + ".rdf";
+				// go through header line and put the column numbers into the config file.
+				for (int i = 0; i < numAttributes; i++) {
+					// is is the column
+					config.setItemColumn(attributes[i], i);
+					
+					
+				}
+				
+				if (DEBUG) {
+				
+					System.out.println("ITEMS");
+				
+					for (String iName : config.csvItems()) {
+						int column = config.getItemColumn(iName);
+						System.out.println(iName + " " + column);
+					}
+						
+					System.out.println("");
+				}
+
+				outputFile = baseFileName + ".rdf";
 				System.out.println("Writing RDF to " + outputFile);
 				RDFWriter writer = new RDFWriter(outputFile);		
-				writer.startRDF(attributes, idAttribute, instanceType, superclassName);	// this writes header and beginning part of the file.
-																		// also fixes up attributes.
+				writer.startRDF();	// this writes header and beginning part of the file.
+				// write out the classes and property descriptions
+				for (String className : config.classes()) {
+					// write the class description
+					CSVConfig.HeaderClass c = config.getClass(className);	// definitely there.
+					writer.writeClassInfo(className, c.superClassName());
+					// write the property descriptions
+					for (String propName : config.getProperties(className)) {
+						writer.writePropertyTag(propName, className);
+					}
+				}
 				
+				// now write the individual instances
 				String [] nextLine;
 				while ((nextLine = reader.readNext()) != null) {
 					// process one line at a time.
@@ -154,17 +258,37 @@ public class csv2rdf {
 					// add some error checking
 					
 					if (nextLine.length == numAttributes) {
-						nextLine[idAttribute] = nextLine[idAttribute].trim();
-						writer.startInstance(nextLine[idAttribute], instanceType);
-						for (int i = 0; i < nextLine.length; i++) {
-							if (i != idAttribute) {
-								nextLine[i] = nextLine[i].trim();
-								if (!nextLine[i].equals("")) {
-									writer.writeAttributeData(attributes[i], nextLine[i]);
-								} // don't write attributes without Data. -- RH 12.07.02
-							}
+						fixInputLine(nextLine);	// trims each string
+						// drive the writing of the data from the classes/properties in config
+						for (String className : config.classes()) {
+							CSVConfig.HeaderItem item = config.getClass(className);
+							int col = item.column();
+							if ((col != -1) && containsData(nextLine[col]))	{
+								// if there is no data for the class field, don't write this line at all for that class
+								// (or this could be unlabeledx...?
+								
+								 // (need to sanitize this data (underscores, etc) because it's an ID)
+								writer.startInstance(fixAttributeName(nextLine[col]), className);
+								if (DEBUG) System.out.println("Instance of " + className + " " +'"' + nextLine[col] + '"');
+								for (String propName : config.getProperties(className)) {
+									// write a line for each property that has data
+								 	CSVConfig.HeaderItem propItem = config.getProperty(className, propName);
+								 	if (propItem != null) {
+								 		int propCol = propItem.column();
+								 		if ((propCol != -1) && containsData(nextLine[propCol])) {
+								 			// we have a column for this property, and that column has data in this instance
+								 			// don't sanitize this data because it's not in a header. (?)
+								 			writer.writeAttributeData(propName, nextLine[propCol]);
+									    	if (DEBUG) System.out.println("	 " + propName  + " " + '"' + nextLine[propCol] + '"');
+								 		}
+								 	}
+								}
+								writer.endInstance();
+							}	
 						}
-						writer.endInstance();
+						// done with this line of the file.
+						if (DEBUG) System.out.println("---");
+
 		
 					} else {
 						System.out.println("Badly formed instance, skipping");
@@ -177,6 +301,8 @@ public class csv2rdf {
 				}
 				writer.endRDF();	// anything that goes at the end of the RDF (and closes the file)
 	
+				reader.close(); 
+	
 			} else {
 				System.out.println("Empty input file:" + fileName);
 			}
@@ -185,7 +311,6 @@ public class csv2rdf {
 			System.err.println("Could not open file:" + fileName);
 	  }
 
-		
 		
 
 	}

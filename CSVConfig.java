@@ -47,6 +47,9 @@ public class CSVConfig {
 	   public int column() { return csv_column; }
 		public String csv_name() { return csv_name; }
 		public String rdf_name() { return rdf_name; }
+		
+		public String itemType() { return "Item"; }	// will be overridden by subclasses
+		public String className() {return ""; }	// will be overridden
 	}
 	
 	static class HeaderProperty extends HeaderItem {
@@ -56,6 +59,9 @@ public class CSVConfig {
 			super(csv_name, rdf_name, -1);
 			this.class_name = class_name;	//doesn't check if class exists, leaves that to caller
 		}
+		
+		public String itemType() { return "property"; }	// will be overridden by subclasses
+		public String className() {return class_name; }	// will be overridden
 	}
 	
 	static class HeaderClass extends HeaderItem {
@@ -69,7 +75,9 @@ public class CSVConfig {
 			properties = new HashMap<String, HeaderProperty>();	// empty list of properties
 		}
 		
-		
+		public String itemType() { return "class"; }	// will be overridden by subclasses
+		public String className() {return superClassName; }	// will be overridden
+	
 		public void addProperty(HeaderProperty property) {
 			// what do we do if it exists already?
 			properties.put(property.rdf_name, property);
@@ -103,8 +111,10 @@ public class CSVConfig {
 		
 		if (attributes != null) {
 			int idAttribute = AskForIDAttribute(attributes);	// find out which attribute is the one to be used as ID
-			System.out.println("(Chose " + '"' + attributes[idAttribute].trim() + '"' + ')');
+			String s = attributes[idAttribute].trim();
+			System.out.println("(Chose " + '"' + s + '"' + ')');
 			String className = AskForInstanceType();
+			if (className.length() == 0) className = s;	// no different class name
 			System.out.println("(Chose " + '"' + className + '"' + ')');
 			String superclassName = AskForSuperClassName();
 			System.out.println("(Using superclass " + '"' + superclassName + '"' + ')');
@@ -141,6 +151,9 @@ public class CSVConfig {
 		} else return null;
 	}
 	
+	public int numClasses() {
+		return classes.size();
+	}
 	
 	private void addCSVItem(HeaderItem item) {
 		// used internally when we already have an existing item to add.
@@ -174,7 +187,7 @@ public class CSVConfig {
 		// we might have a legit case where the csv_name for one thing is the rdf_name for another
 		// so this wouldn't work.
 
-		System.out.println("	Adding class:     " + csv_name + "(" + rdf_name + ")");
+		if (DEBUG) System.out.println("	Adding class:     " + csv_name + "(" + rdf_name + ")");
 		HeaderClass c = getClass(rdf_name);	
 
 		if (c == null) {
@@ -229,7 +242,7 @@ public class CSVConfig {
 	}
 	
 	public void addProperty(String csv_name, String rdf_name, String class_name) {
-		 System.out.println("	Adding property:  " + csv_name + " (" + rdf_name + ")");
+		 if (DEBUG) System.out.println("	Adding property:  " + csv_name + " (" + rdf_name + ")");
 		 HeaderProperty p = new HeaderProperty(csv_name, rdf_name, class_name);
 		 HeaderClass c = getClass(class_name);
 		if (c == null)  {
@@ -301,7 +314,7 @@ public class CSVConfig {
 		while(true)
 		  {  
 			// loop until they enter a valid number
-		  		num = Console.readInt("Which attribute will be used as the name of the instance?");
+		  		num = Console.readInt("Which attribute will be used as the class?");
 				if (num >= 0 && num < attributes.length) {
 					break;
 				} else {
@@ -316,18 +329,16 @@ public class CSVConfig {
 
 	public static String AskForInstanceType() {
 		// ask the user for a string to use as the type of the instance.
-		// for now I happen to know it will be "staff"
-		String instanceType;
+		// if it's blank, return a blank.
+		String instanceType = "";
 		
 		String response;
 		  
-		response = Console.readLine("Please enter a string to use for the type of the instance:").trim();
+		response = Console.readLine("Please enter a string to use for the name of the class:").trim();
 		if (response.length() > 0) {
 			// trim off quotes if they put them there.
 			instanceType = response.replaceAll("^\"|\"$", "").trim().replaceAll(" ","_");
-		} else {
-			instanceType = "Staff";
-		}
+		} 
 		
 		return instanceType;
 	}
@@ -352,6 +363,23 @@ public class CSVConfig {
 		return superclass;
 	}
 
+	public void writeToFile(String fileName) {
+		// write out the configuration to a file 
+		// do this based on the csvitems list 
+		Out out;
+		if (fileName.length() == 0 ) out = new Out();
+		else out = new Out(fileName);
+		for (List<HeaderItem> list : csvItems.values()) {
+			// list associated with each entry in csvItems
+			for (HeaderItem h : list) {
+				out.print(h.csv_name + ",");
+				out.print(h.itemType());
+				if (!h.rdf_name.equals(h.csv_name)) out.print("(" + h.rdf_name + ")");
+				out.println("," + h.className());
+			}
+			
+		}
+	}
 	
 
    private static final String INPUT_FILE="input.csv";

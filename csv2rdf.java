@@ -37,7 +37,7 @@ import java.util.List;
 
 public class csv2rdf {
 	private static final String INPUT_FILE="input.csv";
-   public static final Boolean DEBUG = true;
+   public static final Boolean DEBUG = false;
 
 	static int blankCounter;	// keep track of blanks seen in config file and then in header file.
 	public static String BaseFileName(String name) {
@@ -106,12 +106,16 @@ public class csv2rdf {
 		try {
 
 			CSVReader reader;
-			reader = new CSVReader(new FileReader(fileName));
-			System.out.println("No configuration file. ");
+			reader = new CSVReader(new FileReader(fileName));	// if no file, will be caught by outer call
+			
 			String [] attributes = reader.readNext(); // header line
 			reader.close();	// done with the file for our test
 			
 			config = new CSVConfig(attributes);	// create a config file from the line with asking user questions.
+			
+			String configName = configFileName(fileName);
+			System.out.println("Writing config file to " + configName);
+			config.writeToFile(configName);
 		}
 		catch (IOException i) {
 			// no file.  will catch it later.
@@ -154,6 +158,12 @@ public class csv2rdf {
 			data[i] = data[i].trim();	// fix up the data 
 		}
 	}
+	
+	public static String configFileName(String fileName) {
+	
+		return BaseFileName(fileName) + "-config.csv";
+
+	}
 
    
 	public static void main(String[] args) throws IOException {
@@ -174,18 +184,22 @@ public class csv2rdf {
 		blankCounter = 0;	// before we read the file, reset the blank counter
 		// is there a configuration file?
 	  	try {  
-			String configFile = baseFileName + "-config.csv";
-			config = readConfigFile(configFile);
+			config = readConfigFile(configFileName(fileName));
 		}		
 	   catch (IOException ioe) {
 			// no configuration file, just ask a few questions and do simple configuration from that.
 			// use info from the header of the main file.
+			System.out.println("No configuration file, will construct one from " + fileName);
 			config = doManualConfig(fileName);
 	  }
 
 		// we have now got our configuration.  Print it out if we're debugging.
 		if (DEBUG) {
-			System.out.println("CLASSES");
+			System.out.println("CONFIG file: ");
+			config.writeToFile("");
+			System.out.println();
+			
+			if (config.numClasses() > 0)	System.out.println("CLASSES");
 		
 		   for (String cName : config.classes()) {
 		   	System.out.print(cName + ": ");

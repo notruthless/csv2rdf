@@ -29,7 +29,7 @@ and will only match if they are in the same order.
 
 NOTE: any columns NOT listed in the configuration file will be ignored in the rdf file.
 
-If no configuration file is found, the program reverts to asking questions about which class to use.
+If no configuration file is found, the program will create a basic one (instead of outputting rdf)
 
 Files:
 csv2rdf.jar

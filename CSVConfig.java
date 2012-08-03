@@ -22,8 +22,10 @@ import java.util.*;
 public class CSVConfig {
 	private Map<String, HeaderClass> classes;	// list of the classes we found and the properties within them
 	
-	private Map<String, HeaderItem> csvItems;	// list of all the classes and properties indexed by csv name
-	
+	private Map<String, List<HeaderItem>> csvItems;	// list of all the classes and properties indexed by csv name
+																   // maps the csv name to a list of items for each name.
+																   // (one column can be both a property and a class)
+	 
 	public enum RDFType { CLASS, PROPERTY };
    public static final Boolean DEBUG = false;
 	
@@ -91,7 +93,7 @@ public class CSVConfig {
 	public CSVConfig () {
 		// no parameters, just initialize an empty configuration structure
 		classes = new HashMap<String, HeaderClass>();
-		csvItems = new HashMap<String, HeaderItem>();
+		csvItems = new HashMap<String, List<HeaderItem>>();
 	}
 	
 	public CSVConfig(String[] attributes) {
@@ -145,12 +147,17 @@ public class CSVConfig {
 		// adds the item to the list, indexed by csv_name 
 		// if csv_name is empty, just don't add it to the list - it's a placeholder item
 		
-		if ((item.csv_name.length() > 0) && (getCSVItem(item.csv_name) == null)) {
-				// not already on the list.
-				csvItems.put(item.csv_name, item);
-			} 
+		if (item.csv_name.length() > 0) {
+			List<HeaderItem> list = csvItems.get(item.csv_name);
+			if (list == null) {
+				// nothing there yet, make an empty list
+				list = new ArrayList<HeaderItem>();
+			}
+			list.add(item);	// add to the list
+			csvItems.put(item.csv_name, list);
+		} 
 		
-		}
+	}
 		
 
 	
@@ -200,7 +207,12 @@ public class CSVConfig {
 	}
 	
 	private HeaderItem getCSVItem(String name) {
-		return csvItems.get(name);
+		HeaderItem item = null;
+		List<HeaderItem> list = csvItems.get(name);
+		if (list != null) {
+			item = list.get(0);
+		}
+		return item;
 	}
 	
 	public HeaderProperty getProperty(String className, String propName) {
@@ -251,11 +263,14 @@ public class CSVConfig {
 	
 	public void setItemColumn(String csv_name, int column) {
 		// look up an item by it's name in the csv file and set it's column number
+		// There may be more than one which matches this name (e.g. a property and a class)
+		List<HeaderItem> list = csvItems.get(csv_name);
+		if (list != null) {
+			for (HeaderItem item : list) {
+				item.set_column(column);
+			}
+		}
 
-		HeaderItem item = getCSVItem(csv_name);
-		if (item != null) {
-			item.set_column(column);
-		} 
 		// if it's not there that means the column doesn't exist in the config file.
 		// for now that means we are going to ignore it.
 		
@@ -263,7 +278,7 @@ public class CSVConfig {
 
 	public int getItemColumn(String csv_name) {
 		// look up an item by it's name in the csv file and get it's column number
-
+		// this should still work because by definition the column name is the same in all the items
 		int column = -1;
 		HeaderItem item = getCSVItem(csv_name);
 		if (item != null) {

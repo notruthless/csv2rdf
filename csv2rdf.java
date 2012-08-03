@@ -36,6 +36,8 @@ import java.util.List;
 
 
 public class csv2rdf {
+	private static final String INPUT_FILE="input.csv";
+   public static final Boolean DEBUG = true;
 
 	static int blankCounter;	// keep track of blanks seen in config file and then in header file.
 	public static String BaseFileName(String name) {
@@ -153,8 +155,6 @@ public class csv2rdf {
 		}
 	}
 
-	private static final String INPUT_FILE="input.csv";
-   public static final Boolean DEBUG = false;
    
 	public static void main(String[] args) throws IOException {
 		
@@ -219,12 +219,9 @@ public class csv2rdf {
 				for (int i = 0; i < numAttributes; i++) {
 					// is is the column
 					config.setItemColumn(attributes[i], i);
-					
-					
 				}
 				
 				if (DEBUG) {
-				
 					System.out.println("ITEMS");
 				
 					for (String iName : config.csvItems()) {

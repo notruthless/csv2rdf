@@ -8,6 +8,10 @@
 	CSVConfig stores classes and properties
 	and can relate them to which column they represent in a CSV file
 	
+	12.08.18 keep the classes in order so they are outputed superclasses before subclasses
+	         keep as separate list for use when iterating (because mostly need to look up by name)
+	         
+	
 */
 	
 import au.com.bytecode.opencsv.CSVReader;
@@ -21,6 +25,7 @@ import java.util.*;
 
 public class CSVConfig {
 	private Map<String, HeaderClass> classes;	// list of the classes we found and the properties within them
+	private ArrayList<String> classOrder;  // ordered list with superclasses before subclasses.
 	
 	private Map<String, List<HeaderItem>> csvItems;	// list of all the classes and properties indexed by csv name
 																   // maps the csv name to a list of items for each name.
@@ -60,7 +65,7 @@ public class CSVConfig {
 			this.class_name = class_name;	//doesn't check if class exists, leaves that to caller
 		}
 		
-		public String itemType() { return "property"; }	// will be overridden by subclasses
+		public String itemType() { return "property"; }	
 		public String className() {return class_name; }	// will be overridden
 	}
 	
@@ -75,8 +80,8 @@ public class CSVConfig {
 			properties = new HashMap<String, HeaderProperty>();	// empty list of properties
 		}
 		
-		public String itemType() { return "class"; }	// will be overridden by subclasses
-		public String className() {return superClassName; }	// will be overridden
+		public String itemType() { return "class"; }	
+		public String className() {return superClassName; }	
 	
 		public void addProperty(HeaderProperty property) {
 			// what do we do if it exists already?
@@ -100,7 +105,8 @@ public class CSVConfig {
 	
 	public CSVConfig () {
 		// no parameters, just initialize an empty configuration structure
-		classes = new HashMap<String, HeaderClass>();
+		classes = new HashMap<String, HeaderClass>();   // indexed by name
+		classOrder = new ArrayList<String>();       // sorted by hierarchy
 		csvItems = new HashMap<String, List<HeaderItem>>();
 	}
 	
@@ -135,8 +141,8 @@ public class CSVConfig {
 		}
 	}
 	
-	public Set<String> classes() { 
-		return classes.keySet(); 	// a set of the names of the classes.
+	public String[] classes() { 
+		return  classOrder.toArray(new String[classOrder.size()]); 	// the names of the classes in hierarchy order
 	}
 	
 	public Set<String> csvItems() {
@@ -153,6 +159,14 @@ public class CSVConfig {
 	
 	public int numClasses() {
 		return classes.size();
+	}
+	
+	public String superclassOf(String className) {
+		HeaderClass c = getClass(className);
+		if (c != null) {
+			return c.superClassName();
+		} else return null;
+	   
 	}
 	
 	private void addCSVItem(HeaderItem item) {
@@ -172,7 +186,6 @@ public class CSVConfig {
 		
 	}
 		
-
 	
 	public HeaderClass addClass(String csv_name, String rdf_name, String superclass_name) {
 		// checks if a class indexed by rdf_name exists and adds it if it doesn't
@@ -192,16 +205,20 @@ public class CSVConfig {
 
 		if (c == null) {
 			c = new HeaderClass(csv_name, rdf_name, superclass_name);
-			classes.put(rdf_name, c);	// add the class to the list.
+			addToClassList(rdf_name, c);
+			
 		} else {
 			// if it already exists, we might be updating after we put in placeholders before
+
 			if (c.superClassName() != superclass_name) {
 				c.setSuperClassName(superclass_name);
-			}
+				// remove it and add it again because this can change the sorting
+            removeFromClassList(rdf_name);
+            addToClassList(rdf_name, c);
+		   }
 			if (c.csv_name() != csv_name) {
 				c.set_csv_name(csv_name);	
 			}
-			
 		}
 		
 		// add it to the list of items if it's not already there
@@ -234,12 +251,38 @@ public class CSVConfig {
 		if (c != null) prop = c.properties.get(propName);
 		return prop;	// will be null if the class or the property don't exist.
 	}
-	
-	private void removeClass(String name) {
+
+   private void addToClassList(String rdf_name, HeaderClass newClass) {
+      // put this item onto our list of classes
+      // - add to hashmap
+      // - and add to sorted list of class names by hierarchy
+      // this way we can look up quickly by name, or go through list by hierarchy
+      // We have already determined that this needs to be added to the list.
+      
+      classes.put(rdf_name, newClass);
+      
+      int target = -1;   // location to put this class
+      for (int i = 0; i < classOrder.size(); i++) {   // go through classes and put this one in the right place
+         
+         HeaderClass c = getClass(classOrder.get(i));  
+         if (c.superClassName().equals(rdf_name)) {  
+            if (DEBUG) System.out.println("Found subclass " + c.className() + " of " + rdf_name);
+            target = i;
+            break;   // found where to put it
+         }
+         
+      }
+      if (target == -1) target = classOrder.size();   // never found a subclass, just put us at the end.
+      
+      classOrder.add(target, rdf_name);
+      
+   }
+
+	private void removeFromClassList(String name) {
 		classes.remove(name);
-		// ### need to remove references to the class from other places?
-		// will we be using this?
+		classOrder.remove(name);
 	}
+	
 	
 	public void addProperty(String csv_name, String rdf_name, String class_name) {
 		 if (DEBUG) System.out.println("	Adding property:  " + csv_name + " (" + rdf_name + ")");

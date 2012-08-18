@@ -17,6 +17,7 @@
 	
 	
 	changes:
+	12.08.18 fix fixAttributeName to really strip the quotes.  Ooops
 	12.07.27 redo to use configuration file to help with translation
 				step 1: implement data structures for keeping track of classes and properties
 						  with current interface.
@@ -69,7 +70,7 @@ public class csv2rdf {
 			// minimal error checking
 			
 			if (nextLine.length == 3) {
-				String csv_name = fixAttributeName(nextLine[0]);	// fixes this name like the header (trim, underscores for blanks, unlabeled1, etc)
+				String csv_name = renameBlankAttribute(fixAttributeName(nextLine[0]));	// fixes this name like the header (trim, underscores for blanks, unlabeled1, etc)
 				
 				String [] typeInfo = nextLine[1].split("[\\(\\)]");		// split out what's inside the parenthesis
 				
@@ -77,12 +78,12 @@ public class csv2rdf {
 				
 				String rdf_name = "";
 				if (typeInfo.length > 1) {
-					rdf_name = typeInfo[1].trim().replace("\"", "");	// remove any quotes, too;
+					rdf_name = fixAttributeName(typeInfo[1]);	// may still be blank after this.
 				}
 				if (rdf_name.length() == 0) rdf_name = csv_name;  // there's not a different rdf_name for this item
 				
 				String class_name = nextLine[2].trim();
-				
+				if (class_name.length() > 1) class_name = fixAttributeName(class_name);   // in case there are quotes, etc
 				// OK now add this. Config object will look at the type and do the right thing.
 				config.addItem(itemType, csv_name, rdf_name, class_name);
 
@@ -125,23 +126,33 @@ public class csv2rdf {
 	}
 
 	public static String fixAttributeName(String att) {
-		// uses the global blankCounter to keep track of how many blanks we've seen.
-		// easiest way to be consistent for both reading config file and reading data.	
+		// trim, replace spaces with underscores, remove quotes, etc.
+		// used to sanitize attributes read from the csv or the config file
+		// to make them work for the rdf file.	
 		att = att.trim();
 		att = att.replaceAll(" ","_");
-		if (att.length() == 0) {
-			blankCounter++;
-			att = "unlabeled" + blankCounter;
-		}
+		att = att.replaceAll("\"", "");	// remove any quotes, too;
+		att = att.replaceAll("/", "-");
 		return att;
 	}
 	
+	public static String renameBlankAttribute(String att) {
+		// uses the global blankCounter to keep track of how many blanks we've seen.
+		// and change empty strings to "unlabeled1", "unlabeled2" ...
+		// this is used only to sanitize the csv header data and the csv name in the config
+	
+		if (att.length() == 0) {
+			blankCounter++;
+			att = "unlabeled" + blankCounter;
+		} 
+		return att;
+	}
 	public static void fixAttributes(String[] attributes) {
 		// replace any spaces in the attributes with underscores
 		// replace any blank attributes with "unlabeled1", "unlabeled2" -- RH 12.07.03
 		// (now that happens in fixAttributeName)
 		for (int i = 0; i < attributes.length; i++) {
-			attributes[i] = fixAttributeName(attributes[i]);
+			attributes[i] = renameBlankAttribute(fixAttributeName(attributes[i]));
 		}
 	}
 	
@@ -191,18 +202,20 @@ public class csv2rdf {
 			// use info from the header of the main file.
 			System.out.println("No configuration file, will construct one from " + fileName);
 			config = doManualConfig(fileName);
+			if (DEBUG) {
+				System.out.println("CONFIG file: ");
+				config.writeToFile("");
+				System.out.println();
+			}
 	  }
 
 		// we have now got our configuration.  Print it out if we're debugging.
-		if (DEBUG) {
-			System.out.println("CONFIG file: ");
-			config.writeToFile("");
-			System.out.println();
-			
-			if (config.numClasses() > 0)	System.out.println("CLASSES");
+			if (config.numClasses() > 0)	System.out.println("\nClasses and Properties");
 		
 		   for (String cName : config.classes()) {
-		   	System.out.print(cName + ": ");
+		   	System.out.print(cName);
+		   	if (config.superclassOf(cName) != null) System.out.print(" (" + config.superclassOf(cName) + ")");
+		   	System.out.print(": ");
 		   	for (String pName : config.getProperties(cName)) {
 		   		System.out.print(pName + " ");
 		   	}
@@ -211,7 +224,6 @@ public class csv2rdf {
 		   System.out.println("");
 		   
 		   
-		}
 
 		 		   	
 	

@@ -1,3 +1,12 @@
+/* Write to an RDF file
+	
+	
+	changes:
+	12.08.18 if a property/class has no superclass listed, make it a subclass of Thing
+	         (tried to do this before, but was checking for empty string incorrectly, oops)
+	
+*/
+	
 public class RDFWriter {
 // for now this just writes very simple RDF to the file specified, or to the stdout
 // but I'm doing it as a class to abstract it away from reading from the csv
@@ -37,7 +46,7 @@ public class RDFWriter {
 	public void writeClassInfo(String className, String superclass) {
 		out.printf("<rdf:Description rdf:ID=\"%s\">\n", className);   
 		out.println("  <rdf:type rdf:resource=\"http://www.w3.org/2000/01/rdf-schema#Class\"/>");
-		if (superclass == "") superclass = "Thing";
+		if (superclass.length() == 0) superclass = "Thing";
 		out.printf("  <rdfs:subClassOf rdf:resource=\"#%s\"/>", superclass);
 		out.println("\n</rdf:Description>");
 		out.println(" ");

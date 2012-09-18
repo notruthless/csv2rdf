@@ -11,7 +11,20 @@
 	12.08.18 keep the classes in order so they are outputed superclasses before subclasses
 	         keep as separate list for use when iterating (because mostly need to look up by name)
 	         
-	
+	12.09.18 properties are inherited from superclasses.  Change Config getproperties(propName) to 
+	         return all properties including inherited. (Didn't change HeaderClass.properties() itself
+	         in case we need to sometimes just really get the indiv class properties.)  Also change getProperty 
+	         to look for inherited properties!
+	         
+	         keep track of when a property is also a class. 
+	         - csvItems becomes csvClasses and csvProperties, which map csvName to the Items
+	         - add String propertyIsClass(propName) to Config to tell if something is both (returns associated class name)
+	         (class can then be looked up, or string used directly by caller)
+	         - update writeToFile also
+	         
+	         
+	         
+
 */
 	
 import au.com.bytecode.opencsv.CSVReader;
@@ -27,9 +40,11 @@ public class CSVConfig {
 	private Map<String, HeaderClass> classes;	// list of the classes we found and the properties within them
 	private ArrayList<String> classOrder;  // ordered list with superclasses before subclasses.
 	
-	private Map<String, List<HeaderItem>> csvItems;	// list of all the classes and properties indexed by csv name
-																   // maps the csv name to a list of items for each name.
-																   // (one column can be both a property and a class)
+	                                                 // (one column can be both a property and a class)
+	private Map<String, HeaderClass> csvClasses ;    // maps the csv name to a class
+	private Map<String, HeaderProperty> csvProperties ;    // maps the csv name to a property
+	
+																  
 	 
 	public enum RDFType { CLASS, PROPERTY };
    public static final Boolean DEBUG = false;
@@ -55,10 +70,20 @@ public class CSVConfig {
 		
 		public String itemType() { return "Item"; }	// will be overridden by subclasses
 		public String className() {return ""; }	// will be overridden
-	}
-	
+
+      public String toString() {
+         StringBuilder s = new StringBuilder();
+         
+         s.append(csv_name + ",");
+         s.append(itemType());
+         if (!rdf_name.equals(csv_name)) s.append("(" + rdf_name + ")");
+         s.append("," + className());
+         return s.toString();
+      }
+   }
+
 	static class HeaderProperty extends HeaderItem {
-		String class_name;	
+		String class_name;	// the class I am a property of
 	
 		public HeaderProperty(String csv_name, String rdf_name, String class_name) {
 			super(csv_name, rdf_name, -1);
@@ -82,7 +107,9 @@ public class CSVConfig {
 		
 		public String itemType() { return "class"; }	
 		public String className() {return superClassName; }	
-	
+		public String superClassName() { return superClassName; }
+		public void setSuperClassName(String name) {  superClassName = name; }
+
 		public void addProperty(HeaderProperty property) {
 			// what do we do if it exists already?
 			properties.put(property.rdf_name, property);
@@ -98,8 +125,6 @@ public class CSVConfig {
 			return properties.keySet();	// list of the names of the properties
 		}
 		
-		public String superClassName() { return superClassName; }
-		public void setSuperClassName(String name) {  superClassName = name; }
 	}
 	
 	
@@ -107,7 +132,8 @@ public class CSVConfig {
 		// no parameters, just initialize an empty configuration structure
 		classes = new HashMap<String, HeaderClass>();   // indexed by name
 		classOrder = new ArrayList<String>();       // sorted by hierarchy
-		csvItems = new HashMap<String, List<HeaderItem>>();
+		csvClasses = new HashMap<String, HeaderClass>();   // indexed by csv_name
+		csvProperties = new HashMap<String, HeaderProperty>();   // indexed by csv_name
 	}
 	
 	public CSVConfig(String[] attributes) {
@@ -145,16 +171,23 @@ public class CSVConfig {
 		return  classOrder.toArray(new String[classOrder.size()]); 	// the names of the classes in hierarchy order
 	}
 	
-	public Set<String> csvItems() {
-		return csvItems.keySet();	// names of all the items
-	}
 	
 	
-	public Set<String> getProperties(String className) {
+	public ArrayList<String> getProperties(String className) {
+	   // return ALL the properties associated with the class
+	   // this includes properties inherited from its superclass(es)
+	   
+	   ArrayList<String> l = new ArrayList<String>();  // build a list to return
+	   
 		HeaderClass c = getClass(className);
-		if (c != null) {
-			return c.properties();
-		} else return null;
+		while (c != null) {
+	      for (String s : c.properties()) {
+	         l.add(s);
+	      }
+         c = getClass(c.superClassName());   
+		} 
+		
+		return l;   // if no properties, this will be empty.
 	}
 	
 	public int numClasses() {
@@ -169,21 +202,46 @@ public class CSVConfig {
 	   
 	}
 	
-	private void addCSVItem(HeaderItem item) {
+	public String propertyIsClass(HeaderItem p) {
+	   // given the rdf_name of a property, is that property also a class?
+	   // have to send in the header item itself not just the string because
+	   // can't currently look up a property directly by rdf_name without knowing its class.
+
+	   // return the rdf_name of the matching class, if any, or an empty string.
+	   // NOTE: the rdf_names could be different, but the csv_names will always match 
+	   // if it's the same item.
+	   
+	   String s = "";
+	   if (p != null) {
+         HeaderItem item = csvClasses.get(p.csv_name());
+         if (item != null) s = item.rdf_name();
+	   }
+	   
+	   return s;
+	   
+	   
+	}
+	
+	private void addCSVClass(HeaderClass item) {
 		// used internally when we already have an existing item to add.
 		// adds the item to the list, indexed by csv_name 
 		// if csv_name is empty, just don't add it to the list - it's a placeholder item
-		
-		if (item.csv_name.length() > 0) {
-			List<HeaderItem> list = csvItems.get(item.csv_name);
-			if (list == null) {
-				// nothing there yet, make an empty list
-				list = new ArrayList<HeaderItem>();
-			}
-			list.add(item);	// add to the list
-			csvItems.put(item.csv_name, list);
-		} 
-		
+      
+ 		if (item.csv_name().length() > 0) {
+ 		   // add it to the list // check if it's there first?
+ 		   csvClasses.put (item.csv_name(), item);  
+ 		}
+	}
+
+	private void addCSVProperty(HeaderProperty item) {
+		// used internally when we already have an existing item to add.
+		// adds the item to the list, indexed by csv_name 
+		// if csv_name is empty, just don't add it to the list - it's a placeholder item
+      
+ 		if (item.csv_name.length() > 0) {
+ 		   // add it to the list // check if it's there first?
+ 		   csvProperties.put(item.csv_name(), item);
+ 		}
 	}
 		
 	
@@ -222,7 +280,7 @@ public class CSVConfig {
 		}
 		
 		// add it to the list of items if it's not already there
-		addCSVItem(c);
+		addCSVClass(c );  
 		
 		// in all cases, we want to create the superclass if it doesn't exist.
 		if ((superclass_name.length() > 0) && (!classExists(superclass_name))) {
@@ -236,19 +294,14 @@ public class CSVConfig {
 			return classes.get(name);	
 	}
 	
-	private HeaderItem getCSVItem(String name) {
-		HeaderItem item = null;
-		List<HeaderItem> list = csvItems.get(name);
-		if (list != null) {
-			item = list.get(0);
-		}
-		return item;
-	}
 	
 	public HeaderProperty getProperty(String className, String propName) {
 		HeaderClass c = getClass(className);
 		HeaderProperty prop = null;
-		if (c != null) prop = c.properties.get(propName);
+		while (c != null && prop == null) { //there is a class and we haven't found the property
+		   prop = c.properties.get(propName);
+		   c = getClass(c.superClassName());
+		}
 		return prop;	// will be null if the class or the property don't exist.
 	}
 
@@ -292,7 +345,7 @@ public class CSVConfig {
 			c = addClass("", class_name, "");	// add placeholder
 		}
 		c.addProperty(p);
-		addCSVItem(p);	
+		addCSVProperty(p);	   
 		
 	}
 	
@@ -301,7 +354,7 @@ public class CSVConfig {
 		// for now, if the string is exactly "class" make a class
 		// if it starts with "prop" make a property
 		// otherwise just ignore it 
-		if (DEBUG) System.out.println("Adding item: " + itemType + " " + csv_name + " " + rdf_name + " " + class_name);
+	//	if (DEBUG) System.out.println("Adding item: " + itemType + " " + csv_name + " " + rdf_name + " " + class_name);
 
 		if (itemType.equals("class")) addClass(csv_name, rdf_name, class_name);
 		else if (itemType.startsWith("prop")) addProperty(csv_name, rdf_name, class_name);
@@ -320,28 +373,19 @@ public class CSVConfig {
 	public void setItemColumn(String csv_name, int column) {
 		// look up an item by it's name in the csv file and set it's column number
 		// There may be more than one which matches this name (e.g. a property and a class)
-		List<HeaderItem> list = csvItems.get(csv_name);
-		if (list != null) {
-			for (HeaderItem item : list) {
-				item.set_column(column);
-			}
-		}
+ 
+
+      HeaderItem item = csvClasses.get(csv_name);
+      if (item != null) item.set_column(column);   
+      item = csvProperties.get(csv_name);
+      if (item != null) item.set_column(column);   
+
 
 		// if it's not there that means the column doesn't exist in the config file.
 		// for now that means we are going to ignore it.
 		
 	}
 
-	public int getItemColumn(String csv_name) {
-		// look up an item by it's name in the csv file and get it's column number
-		// this should still work because by definition the column name is the same in all the items
-		int column = -1;
-		HeaderItem item = getCSVItem(csv_name);
-		if (item != null) {
-			column = item.column();
-		} 
-		return column;
-	}
 	
 	public static int AskForIDAttribute(String[] attributes) {
 		// given an array of strings, ask the user which one to use as the id field.
@@ -406,22 +450,24 @@ public class CSVConfig {
 		return superclass;
 	}
 
+   
 	public void writeToFile(String fileName) {
 		// write out the configuration to a file 
-		// do this based on the csvitems list 
+		// do this based on the csvitems lists
 		Out out;
 		if (fileName.length() == 0 ) out = new Out();
 		else out = new Out(fileName);
-		for (List<HeaderItem> list : csvItems.values()) {
-			// list associated with each entry in csvItems
-			for (HeaderItem h : list) {
-				out.print(h.csv_name + ",");
-				out.print(h.itemType());
-				if (!h.rdf_name.equals(h.csv_name)) out.print("(" + h.rdf_name + ")");
-				out.println("," + h.className());
-			}
-			
+		
+		for (HeaderItem item : csvClasses.values()) {
+		   // go through each item
+		      out.println(item.toString());
 		}
+		
+		for (HeaderItem item : csvProperties.values()) {
+		   // go through each item
+		      out.println(item.toString());
+		}
+			
 	}
 	
 

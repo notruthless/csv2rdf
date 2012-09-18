@@ -4,7 +4,8 @@
 	changes:
 	12.08.18 if a property/class has no superclass listed, make it a subclass of Thing
 	         (tried to do this before, but was checking for empty string incorrectly, oops)
-	
+   12.09.18 when writing properties, allow different "ranges" (types) besides String.
+            when writing attribute data, write other types besides string (references to properties)	
 */
 	
 public class RDFWriter {
@@ -13,6 +14,7 @@ public class RDFWriter {
 
 	// instance variables
 	private  Out out;
+	public final String STRING_RANGE = "http://www.w3.org/2001/XMLSchema#string";
 	
 	// constructor
 	public RDFWriter() {
@@ -35,13 +37,21 @@ public class RDFWriter {
 		out.close();
 	}
 	
-	public void writePropertyTag(String attributeName, String className) {
+	public void writePropertyTag(String attributeName, String className, String rangeType) {
+	   // allow for rangeTypes other than "String".  If rangeType is empty, use "#string"
+	   // have to put a "#" before a primitive type but not in front of a "schema" type.
+	   // grr.  Maybe just check if the string has a # and add one to the beginning if not.
+	   
 		out.printf( "<rdf:Property rdf:ID=\"%s\">\n", attributeName);
 		out.printf( "  <rdfs:domain rdf:resource=\"#%s\"/>\n", className);  
-		out.println("  <rdfs:range rdf:resource=\"http://www.w3.org/2001/XMLSchema#string\"/>"); 
+		if (rangeType.length() == 0) rangeType = STRING_RANGE;
+		else if (!rangeType.contains("#")) rangeType = "#" + rangeType;
+		
+		out.printf("  <rdfs:range rdf:resource=\"%s\"/>\n", rangeType); 
 		out.println("</rdf:Property>");
 		out.println(" ");
 	}
+	
 	
 	public void writeClassInfo(String className, String superclass) {
 		out.printf("<rdf:Description rdf:ID=\"%s\">\n", className);   
@@ -65,7 +75,13 @@ public class RDFWriter {
 	
 	
 	public void writeAttributeData(String attName, String attData) {
+	   // <sample:price>14.00</sample:price>
 		out.printf("  <sample:%s>%s</sample:%s>\n", attName, attData, attName);
+	}
+
+	public void writeAttributeDataResource(String attName, String attData) {
+	   // <sample:fromcountry rdf:resource="Thailand" />
+		out.printf("  <sample:%s rdf:resource=\"%s\"/>\n", attName, attData);
 	}
 	
 	

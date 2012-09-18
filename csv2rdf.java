@@ -24,6 +24,7 @@
 				step 2: read and process configuration file.
 	12.06.27 change spaces to underscores in attribute names.
 				trim leading/trailing spaces from data.
+	12.09.18 check for properties which are classes when writing out property tags and instance data
 	
 */
 	
@@ -41,6 +42,7 @@ public class csv2rdf {
    public static final Boolean DEBUG = false;
 
 	static int blankCounter;	// keep track of blanks seen in config file and then in header file.
+	
 	public static String BaseFileName(String name) {
 		// takes a file name (like input.csv) and returns it without the extension
 		int p = name.lastIndexOf(".");
@@ -129,6 +131,8 @@ public class csv2rdf {
 		// trim, replace spaces with underscores, remove quotes, etc.
 		// used to sanitize attributes read from the csv or the config file
 		// to make them work for the rdf file.	
+		// need to remove # characters?
+		
 		att = att.trim();
 		att = att.replaceAll(" ","_");
 		att = att.replaceAll("\"", "");	// remove any quotes, too;
@@ -247,16 +251,6 @@ public class csv2rdf {
 					config.setItemColumn(attributes[i], i);
 				}
 				
-				if (DEBUG) {
-					System.out.println("ITEMS");
-				
-					for (String iName : config.csvItems()) {
-						int column = config.getItemColumn(iName);
-						System.out.println(iName + " " + column);
-					}
-						
-					System.out.println("");
-				}
 
 				outputFile = baseFileName + ".rdf";
 				System.out.println("Writing RDF to " + outputFile);
@@ -269,7 +263,8 @@ public class csv2rdf {
 					writer.writeClassInfo(className, c.superClassName());
 					// write the property descriptions
 					for (String propName : config.getProperties(className)) {
-						writer.writePropertyTag(propName, className);
+						String propClass = config.propertyIsClass(config.getProperty(className, propName));
+						writer.writePropertyTag(propName, className, propClass);
 					}
 				}
 				
@@ -300,9 +295,16 @@ public class csv2rdf {
 								 		int propCol = propItem.column();
 								 		if ((propCol != -1) && containsData(nextLine[propCol])) {
 								 			// we have a column for this property, and that column has data in this instance
-								 			// don't sanitize this data because it's not in a header. (?)
-								 			writer.writeAttributeData(propName, nextLine[propCol]);
-									    	if (DEBUG) System.out.println("	 " + propName  + " " + '"' + nextLine[propCol] + '"');
+
+								 			String propClass = config.propertyIsClass(propItem);
+								 			
+								 			// write the data differently if it's also a class
+								 			if (propClass.length() == 0)
+								 			   writer.writeAttributeData(propName, nextLine[propCol]);
+								 			else 
+								 			   writer.writeAttributeDataResource(propName, fixAttributeName(nextLine[propCol]));  // in this case it is an ID so sanitize
+									    	if (DEBUG) System.out.println("	 " + propName  + " " 
+									    	         + '"' + nextLine[propCol] + '"' + " (" + propClass + ")");
 								 		}
 								 	}
 								}

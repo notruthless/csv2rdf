@@ -29,12 +29,12 @@ and will only match if they are in the same order.
 
 NOTE: any columns NOT listed in the configuration file will be ignored in the rdf file.
 
-If no configuration file is found, the program will create a basic one (instead of outputting rdf)
+If no configuration file is found, the program will create a basic one
 
 Files:
 csv2rdf.jar
-input.csv  - sample input file
-input-config.csv - sample config file
+example.csv  - sample input file
+example-config.csv - sample config file
 src - source files
 
 To run CSV to RDF from the console:

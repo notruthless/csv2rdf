@@ -1,24 +1,26 @@
-Invoice_ID,class("shipment"),all
+Invoice_ID,class(shipment),all
 Carrier_ID,property,shipment
 service_type_desc,property,shipment
 Package_Number,property,shipment
 Ship_Date,property,shipment
 Sender_Company,class(shipper),all
-Sender_Name,property,shipper
+Sender_Company,property (fromshipper),shipment
+Sender_Name,property(sender),shipper
 Sender_Street,property,shipper
 Sender_City,property,shipper
 Sender_State,property,shipper
 Sender_Zip,property,shipper
 Sender_Country_Code,property,shipper
-Receiver_Company,class(company),all
-Receiver_Name,property,company
-Receiver_Street,property,company
-Receiver_Street2,property,company
-Receiver_City,property,company
-Receiver_State,property,company
-Receiver_Zip,property,company
-Receiver_Country_Code,property,company
-Quantity,property(QTY),shipment
+Receiver_Company,class(reciever),all
+Receiver_Company,property(hasReciever),shipment
+Receiver_Name,property (receiver-staff),reciever
+Receiver_Street,property (street) ,reciever
+Receiver_Street2,property (street2),reciever
+Receiver_City,property (city) ,reciever
+Receiver_State,property (state) ,reciever
+Receiver_Zip,property (zip),reciever
+Receiver_Country_Code,property,reciever
+Quantity,property,shipment
 Weight,property,shipment
 Wholesale_Amount,property,shipment
 Total_Charge,property,shipment
@@ -26,7 +28,7 @@ Zone_Code,property,shipment
 International_Origin,property,shipment
 International_Destination,property,shipment
 Sender_Account_Number,property,shipper
-Receiver_Account_Number,property,company
+Receiver_Account_Number,property (account-number),reciever
 invoice_number,property,shipment
 Actual_delivery_date,property,shipment
 Actual_delivery_time,property,shipment

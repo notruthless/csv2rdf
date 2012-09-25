@@ -1,35 +1,35 @@
-Invoice_ID,class(shipment),all
-Carrier_ID,property,shipment
-service_type_desc,property,shipment
-Package_Number,property,shipment
+Invoice_ID,class(Shipment),all
+Carrier_ID,property(Carrier),shipment
+service_type_desc,property(Service),shipment
+Package_Number,property (Package_num),shipment
 Ship_Date,property,shipment
-Sender_Company,class(shipper),all
+Sender_Company,class(Shipper),all
 Sender_Company,property (fromshipper),shipment
-Sender_Name,property(sender),shipper
-Sender_Street,property,shipper
-Sender_City,property,shipper
-Sender_State,property,shipper
-Sender_Zip,property,shipper
-Sender_Country_Code,property,shipper
-Receiver_Company,class(reciever),all
+Sender_Name,property(Sender),shipper
+Sender_Street,property (Street),shipper
+Sender_City,property (City),shipper
+Sender_State,property (State),shipper
+Sender_Zip,property(Zip),shipper
+Sender_Country_Code,property(Country),shipper
+Receiver_Company,class(Reciever),all
 Receiver_Company,property(hasReciever),shipment
-Receiver_Name,property (receiver-staff),reciever
-Receiver_Street,property (street) ,reciever
-Receiver_Street2,property (street2),reciever
-Receiver_City,property (city) ,reciever
-Receiver_State,property (state) ,reciever
-Receiver_Zip,property (zip),reciever
-Receiver_Country_Code,property,reciever
+Receiver_Name,property (Receiver-staff),reciever
+Receiver_Street,property (Street) ,reciever
+Receiver_Street2,property (Street2),reciever
+Receiver_City,property (City) ,reciever
+Receiver_State,property (State) ,reciever
+Receiver_Zip,property (Zip),reciever
+Receiver_Country_Code,property(Country),reciever
 Quantity,property,shipment
 Weight,property,shipment
-Wholesale_Amount,property,shipment
+Wholesale_Amount,property(Wholesale),shipment
 Total_Charge,property,shipment
 Zone_Code,property,shipment
 International_Origin,property,shipment
 International_Destination,property,shipment
-Sender_Account_Number,property,shipper
-Receiver_Account_Number,property (account-number),reciever
-invoice_number,property,shipment
-Actual_delivery_date,property,shipment
-Actual_delivery_time,property,shipment
-Recipient_signature,property,shipment
+Sender_Account_Number,property(Account-number),shipper
+Receiver_Account_Number,property(Account-number),reciever
+invoice_number,property(Invoice),shipment
+Actual_delivery_date,property(Delivery-date),shipment
+Actual_delivery_time,property(Delivery-time),shipment
+Recipient_signature,property(Signature),shipment

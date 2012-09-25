@@ -1,4 +1,7 @@
-/* Translate CSV to RDF in a very simple translation.
+/* Ruth Helfinstein
+   July 2012
+    
+   Translate CSV to RDF in a very simple translation.
 	Assumes the first line is the attributes
 	Take as input which attribute is the ID of the instance 
 	Take as input the type of the instance (which is not in the CSV)
@@ -17,6 +20,9 @@
 	
 	
 	changes:
+	12.09.24 be sure to use the actual rdf_name of the class, not the name in the class list
+	         when writing the data (class names are lower case in the list for lookup)
+	12.09.18 check for properties which are classes when writing out property tags and instance data
 	12.08.18 fix fixAttributeName to really strip the quotes.  Ooops
 	12.07.27 redo to use configuration file to help with translation
 				step 1: implement data structures for keeping track of classes and properties
@@ -24,7 +30,6 @@
 				step 2: read and process configuration file.
 	12.06.27 change spaces to underscores in attribute names.
 				trim leading/trailing spaces from data.
-	12.09.18 check for properties which are classes when writing out property tags and instance data
 	
 */
 	
@@ -163,7 +168,7 @@ public class csv2rdf {
 	public static boolean containsData(String s) {
 		// returns false if s is an empty String
 		// or the word "null" (or NULL)
-		return ((s.length() > 0)  && !s.toLowerCase().equals("null"));
+		return ((s.length() > 0)  && !s.equalsIgnoreCase("null"));
 
 	}
 	
@@ -214,11 +219,19 @@ public class csv2rdf {
 	  }
 
 		// we have now got our configuration.  Print it out if we're debugging.
+		if (DEBUG) {
+		   System.out.println("Class list: ");
+		   for (String cName : config.classes()) System.out.print(cName + ", ");
+		   System.out.println();
+		}
+		
 			if (config.numClasses() > 0)	System.out.println("\nClasses and Properties");
 		
 		   for (String cName : config.classes()) {
-		   	System.out.print(cName);
-		   	if (config.superclassOf(cName) != null) System.out.print(" (" + config.superclassOf(cName) + ")");
+	         CSVConfig.HeaderClass c = config.getClass(cName);
+		   	System.out.print(c.rdf_name());
+		   	String s = config.superClassOf(cName);
+		   	if (s != null && s.length() > 0) System.out.print(" (" + s + ")");
 		   	System.out.print(": ");
 		   	for (String pName : config.getProperties(cName)) {
 		   		System.out.print(pName + " ");
@@ -227,9 +240,7 @@ public class csv2rdf {
 		   }
 		   System.out.println("");
 		   
-		   
-
-		 		   	
+		   		 		   	
 	
 		// Now read in the input file and process it using the information we stored from the configuration step.
 	  	try {  // handle error where file doesn't exist.
@@ -257,12 +268,14 @@ public class csv2rdf {
 				RDFWriter writer = new RDFWriter(outputFile);		
 				writer.startRDF();	// this writes header and beginning part of the file.
 				// write out the classes and property descriptions
-				for (String className : config.classes()) {
+				for (String cName : config.classes()) {
 					// write the class description
-					CSVConfig.HeaderClass c = config.getClass(className);	// definitely there.
-					writer.writeClassInfo(className, c.superClassName());
+					CSVConfig.HeaderClass c = config.getClass(cName);	// definitely there.
+					String superClassName = config.superClassOf(c);   // make sure we get the right name RH 12.09.24
+					String className = c.rdf_name();   // make sure we get the right capitalization
+					writer.writeClassInfo(className, superClassName);
 					// write the property descriptions
-					for (String propName : config.getProperties(className)) {
+					for (String propName : config.getProperties(cName)) {
 						String propClass = config.propertyIsClass(config.getProperty(className, propName));
 						writer.writePropertyTag(propName, className, propClass);
 					}
@@ -278,19 +291,19 @@ public class csv2rdf {
 					if (nextLine.length == numAttributes) {
 						fixInputLine(nextLine);	// trims each string
 						// drive the writing of the data from the classes/properties in config
-						for (String className : config.classes()) {
-							CSVConfig.HeaderItem item = config.getClass(className);
+						for (String cName : config.classes()) {
+							CSVConfig.HeaderItem item = config.getClass(cName);
 							int col = item.column();
 							if ((col != -1) && containsData(nextLine[col]))	{
 								// if there is no data for the class field, don't write this line at all for that class
 								// (or this could be unlabeledx...?
 								
 								 // (need to sanitize this data (underscores, etc) because it's an ID)
-								writer.startInstance(fixAttributeName(nextLine[col]), className);
-								if (DEBUG) System.out.println("Instance of " + className + " " +'"' + nextLine[col] + '"');
-								for (String propName : config.getProperties(className)) {
+								writer.startInstance(fixAttributeName(nextLine[col]), item.rdf_name());
+								if (DEBUG) System.out.println("Instance of " + item.rdf_name() + " " +'"' + nextLine[col] + '"');
+								for (String propName : config.getProperties(cName)) {
 									// write a line for each property that has data
-								 	CSVConfig.HeaderItem propItem = config.getProperty(className, propName);
+								 	CSVConfig.HeaderItem propItem = config.getProperty(cName, propName);
 								 	if (propItem != null) {
 								 		int propCol = propItem.column();
 								 		if ((propCol != -1) && containsData(nextLine[propCol])) {

@@ -1,4 +1,7 @@
 /* 
+   Ruth Helfinstein
+   July 2012
+   
 	class csvconfig
 	can either be initialized with a config file where each line in the config file 
 	corresponds to a column in the csv file header and describes the mapping
@@ -8,9 +11,33 @@
 	CSVConfig stores classes and properties
 	and can relate them to which column they represent in a CSV file
 	
-	12.08.18 keep the classes in order so they are outputed superclasses before subclasses
-	         keep as separate list for use when iterating (because mostly need to look up by name)
+   12.09.25	  FIX class order list for more than one superclass (e.g. C subclass of B subclass of A)
+	         -> have to wait and put together classOrder at the end - if add place holders for C and B
+	            before we add A ends up out of order in the end.
+	         Don't create the ordered list as we go along.  Instead, when we are asked
+	            for an ordered list, create it then if it doesn't exist.
+	            (NOTE: assumes there won't be more changes to the config - alternate
+	            would be to just create it on the fly each time, which is probably OK too)
+
+	12.09.25 Change so we are case insensitive wrt the name of a class.
+	         (e.g. Shipper == shipper)
+	         BUT retain the correct capitalization inside the item for display
+	         lowercase the classname before put in as key (addToClassList)
+	         lowercase the classnames when looking up. (getClass)
 	         
+	         because property names never get referred to this way, only used.
+	            
+	         also have to consider superclassnames because they need to have the same
+	         capitalization.  Safest/cleanest way is to always look up superclass and get
+	         rdf_name directly from the item (vs just use the string we have which is what we do now).
+	         
+	         have to change USAGE (in csv2rdf) so that instead of just getting superClassName
+	         directly it calls superClassOf(class) in config and we can look it up.
+	         
+	         We know the right capitalization from when we're reading the line in the config
+	            name,class(Staff),all
+            We really only know that in addItem, so make sure to set the name correctly then.
+            
 	12.09.18 properties are inherited from superclasses.  Change Config getproperties(propName) to 
 	         return all properties including inherited. (Didn't change HeaderClass.properties() itself
 	         in case we need to sometimes just really get the indiv class properties.)  Also change getProperty 
@@ -21,6 +48,11 @@
 	         - add String propertyIsClass(propName) to Config to tell if something is both (returns associated class name)
 	         (class can then be looked up, or string used directly by caller)
 	         - update writeToFile also
+
+	12.08.18 keep the classes in order so they are outputed superclasses before subclasses
+	         keep as separate list for use when iterating (because mostly need to look up by name)
+	         
+            
 	         
 	         
 	         
@@ -91,7 +123,7 @@ public class CSVConfig {
 		}
 		
 		public String itemType() { return "property"; }	
-		public String className() {return class_name; }	// will be overridden
+		public String className() {return class_name; }	
 	}
 	
 	static class HeaderClass extends HeaderItem {
@@ -106,7 +138,7 @@ public class CSVConfig {
 		}
 		
 		public String itemType() { return "class"; }	
-		public String className() {return superClassName; }	
+		public String className() {return rdf_name; }	
 		public String superClassName() { return superClassName; }
 		public void setSuperClassName(String name) {  superClassName = name; }
 
@@ -124,14 +156,14 @@ public class CSVConfig {
 		public Set<String> properties() {
 			return properties.keySet();	// list of the names of the properties
 		}
-		
+				
 	}
 	
 	
 	public CSVConfig () {
 		// no parameters, just initialize an empty configuration structure
 		classes = new HashMap<String, HeaderClass>();   // indexed by name
-		classOrder = new ArrayList<String>();       // sorted by hierarchy
+		classOrder = null;       // sorted by hierarchy, create when needed
 		csvClasses = new HashMap<String, HeaderClass>();   // indexed by csv_name
 		csvProperties = new HashMap<String, HeaderProperty>();   // indexed by csv_name
 	}
@@ -167,8 +199,53 @@ public class CSVConfig {
 		}
 	}
 	
+   
+
+	private void addInClassOrder(String key_name) {
+	         // now figure out its order for classOrder
+	      
+	   if (classOrder == null)
+	      classOrder = new ArrayList<String>();
+	      
+      int target = -1;   // location to put this class
+
+      for (int i = 0; i < classOrder.size(); i++) {   // go through classes and put this one in the right place
+         String thisEntry = classOrder.get(i);
+         if (isAncestorOf(thisEntry, key_name))  {  
+            // everything before this is "less than" or "equal to" us.  
+            if (DEBUG) System.out.println(key_name + " is an ancestor of " + thisEntry + " : " + i);
+            target = i;
+            break;   // found where to put it
+         }
+         
+      }
+      if (target == -1) {
+         target = classOrder.size();   // never found a subclass, just put us at the end.
+         if (DEBUG) System.out.println(key_name + " goes at end : " + target);
+      }
+    
+      classOrder.add(target, key_name);   
+
+	}
+
+
 	public String[] classes() { 
-		return  classOrder.toArray(new String[classOrder.size()]); 	// the names of the classes in hierarchy order
+	   // generate a list sorted by class hierarchy
+	   
+	   
+	   if (classOrder == null) {
+	      // generate an ordered list from the set of classes
+	      classOrder = new ArrayList<String>();
+	      
+	      for (String s : classes.keySet()) {
+            if (DEBUG) System.out.println("(" + s + ")" );
+
+	         addInClassOrder(s);
+	      }
+	   }
+	   
+		return  classOrder.toArray(new String[classOrder.size()]); 	// the names of the classes in hierarchy order */
+		
 	}
 	
 	
@@ -178,7 +255,6 @@ public class CSVConfig {
 	   // this includes properties inherited from its superclass(es)
 	   
 	   ArrayList<String> l = new ArrayList<String>();  // build a list to return
-	   
 		HeaderClass c = getClass(className);
 		while (c != null) {
 	      for (String s : c.properties()) {
@@ -194,12 +270,49 @@ public class CSVConfig {
 		return classes.size();
 	}
 	
-	public String superclassOf(String className) {
-		HeaderClass c = getClass(className);
+	public String superClassOf(HeaderClass c) {
 		if (c != null) {
-			return c.superClassName();
-		} else return null;
+		   HeaderClass s = getClass(c.superClassName());
+		   if (s != null) return s.rdf_name();    // make sure we get the accurate name
+		   else return "";   // we may not have a superclass.
+		} 
+		
+		return null;
+		
+	}
+	
+	public String superClassOf(String className) {
+		HeaderClass c = getClass(className);
+	   return superClassOf(c);
+	}
+	
+	private Set<String> ancestorsOf(String className) {
+	   HashSet<String> a = new HashSet<String>();
 	   
+	   HeaderClass c = getClass(className);
+	   if (c != null) {
+	      c = getClass(c.superClassName()); // first ancestor, if any
+	      while (c != null) {
+	         a.add(c.rdf_name()); // add to the set
+	         c = getClass(c.superClassName());   // up the chain
+	      }
+	      
+	   }
+	   
+	   return a;
+	
+	}
+	
+	public Boolean isAncestorOf(String className, String ancestorName) {
+	   // check if the class named ancestorName is anywhere in the superclass list of className
+	   
+	   Set<String> a = ancestorsOf(className);
+	   if (DEBUG) {
+	     // System.out.println("Ancestors of " + className + ": " + a);
+	   }
+	   return a.contains(ancestorName);
+
+	
 	}
 	
 	public String propertyIsClass(HeaderItem p) {
@@ -258,24 +371,26 @@ public class CSVConfig {
 		// we might have a legit case where the csv_name for one thing is the rdf_name for another
 		// so this wouldn't work.
 
-		if (DEBUG) System.out.println("	Adding class:     " + csv_name + "(" + rdf_name + ")");
-		HeaderClass c = getClass(rdf_name);	
+		if (DEBUG) System.out.println("	>>Adding class:     " + csv_name + "(" + rdf_name + ")" + " subclass of " + superclass_name);
+		String key_name = new String(rdf_name);
+		key_name = key_name.toLowerCase();  // key name always lower case for lookups
+		                                             // RH 2012.09.24
+		HeaderClass c = getClass(key_name);	
 
 		if (c == null) {
+		   // create a new item for this class
+		   // create with correct case version of name (rdf_name) not lowercase
 			c = new HeaderClass(csv_name, rdf_name, superclass_name);
-			addToClassList(rdf_name, c);
+			addToClassList(key_name, c);
 			
 		} else {
 			// if it already exists, we might be updating after we put in placeholders before
 
-			if (c.superClassName() != superclass_name) {
+			if ((superclass_name.length() > 0) && !superclass_name.equals(c.superClassName())) {
 				c.setSuperClassName(superclass_name);
-				// remove it and add it again because this can change the sorting
-            removeFromClassList(rdf_name);
-            addToClassList(rdf_name, c);
 		   }
-			if (c.csv_name() != csv_name) {
-				c.set_csv_name(csv_name);	
+			if ( (csv_name.length() > 0) && !csv_name.equals(c.csv_name())) {
+				c.set_csv_name(csv_name);
 			}
 		}
 		
@@ -291,7 +406,13 @@ public class CSVConfig {
 	}
 	
 	public HeaderClass getClass(String name) {
-			return classes.get(name);	
+			// classes are stored as lowercase, so make sure we're checking for lowercase name
+			// but don't change actual string (I was surprised but it toLowerCase seems to work in place.)
+			if (name.length() > 0) {
+            String key_name = new String(name); 
+            
+            return classes.get(key_name.toLowerCase());	
+         } else return null;
 	}
 	
 	
@@ -304,37 +425,25 @@ public class CSVConfig {
 		}
 		return prop;	// will be null if the class or the property don't exist.
 	}
+	
 
-   private void addToClassList(String rdf_name, HeaderClass newClass) {
+   private void addToClassList(String key_name, HeaderClass newClass) {
       // put this item onto our list of classes
       // - add to hashmap
-      // - and add to sorted list of class names by hierarchy
-      // this way we can look up quickly by name, or go through list by hierarchy
       // We have already determined that this needs to be added to the list.
       
-      classes.put(rdf_name, newClass);
+      // key name is all lower case before it is sent in.
       
-      int target = -1;   // location to put this class
-      for (int i = 0; i < classOrder.size(); i++) {   // go through classes and put this one in the right place
+      if (key_name.length() > 0) {
+         classes.put(key_name, newClass);
          
-         HeaderClass c = getClass(classOrder.get(i));  
-         if (c.superClassName().equals(rdf_name)) {  
-            if (DEBUG) System.out.println("Found subclass " + c.className() + " of " + rdf_name);
-            target = i;
-            break;   // found where to put it
-         }
-         
+      } else {
+      // don't add an empty key!! 
+         if (DEBUG) System.out.println("       OOPS! key name is empty");
       }
-      if (target == -1) target = classOrder.size();   // never found a subclass, just put us at the end.
-      
-      classOrder.add(target, rdf_name);
       
    }
 
-	private void removeFromClassList(String name) {
-		classes.remove(name);
-		classOrder.remove(name);
-	}
 	
 	
 	public void addProperty(String csv_name, String rdf_name, String class_name) {
@@ -354,13 +463,24 @@ public class CSVConfig {
 		// for now, if the string is exactly "class" make a class
 		// if it starts with "prop" make a property
 		// otherwise just ignore it 
-	//	if (DEBUG) System.out.println("Adding item: " + itemType + " " + csv_name + " " + rdf_name + " " + class_name);
+		// if (DEBUG) System.out.println("Adding item: " + itemType + " " + csv_name + " " + rdf_name + " " + class_name);
 
-		if (itemType.equals("class")) addClass(csv_name, rdf_name, class_name);
-		else if (itemType.startsWith("prop")) addProperty(csv_name, rdf_name, class_name);
-		else 	{
+		if (itemType.equals("class")) {
+		   HeaderClass c = addClass(csv_name, rdf_name, class_name);
+		   // at this point we KNOW the class has been created AND we know that
+		   // rdf_name is the capitalization that we want to use so set it.  RH 12.09.24
+			if (!rdf_name.equals(c.rdf_name())) {
+			   c.set_rdf_name(rdf_name);
+			   if (DEBUG) System.out.println("RDF Name is " + c.rdf_name());
+			}
+
+		   
+		} else if (itemType.startsWith("prop")) {
+		   addProperty(csv_name, rdf_name, class_name);
+		   
+		} else 	{
 		// otherwise it says ignore so ignore it.
-			if (DEBUG) System.out.println("(ignoring)");
+			System.out.println("Item " + csv_name + " is not defined as a class or a property (ignoring)");
 		}
 
 	}
@@ -494,6 +614,7 @@ public class CSVConfig {
 		   reader.close();	// done with the file for our test
 		   
 		   CSVConfig config = new CSVConfig(attributes);	// create a config file from the line with asking user questions.
+		   
 		   
 		   // write out what we did.
 		   System.out.println("Classes");

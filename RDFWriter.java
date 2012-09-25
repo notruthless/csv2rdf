@@ -1,11 +1,14 @@
 /* Write to an RDF file
 	
-	
+   Ruth Helfinstein
+   July 2012
+   	
 	changes:
-	12.08.18 if a property/class has no superclass listed, make it a subclass of Thing
-	         (tried to do this before, but was checking for empty string incorrectly, oops)
+   12.09.24 add a "#" in writeAttributeDataResource!
    12.09.18 when writing properties, allow different "ranges" (types) besides String.
             when writing attribute data, write other types besides string (references to properties)	
+	12.08.18 if a property/class has no superclass listed, make it a subclass of Thing
+	         (tried to do this before, but was checking for empty string incorrectly, oops)
 */
 	
 public class RDFWriter {
@@ -81,7 +84,7 @@ public class RDFWriter {
 
 	public void writeAttributeDataResource(String attName, String attData) {
 	   // <sample:fromcountry rdf:resource="Thailand" />
-		out.printf("  <sample:%s rdf:resource=\"%s\"/>\n", attName, attData);
+		out.printf("  <sample:%s rdf:resource=\"#%s\"/>\n", attName, attData);
 	}
 	
 	
